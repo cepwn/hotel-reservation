@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"github.com/cepwn/hotel-reservation/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -10,7 +11,11 @@ import (
 
 const userCollection = "users"
 
+type Dropper interface {
+	Drop(context.Context) error
+}
 type UserStore interface {
+	Dropper
 	GetUserByID(context.Context, string) (*types.User, error)
 	GetUsers(context.Context) ([]*types.User, error)
 	InsertUser(context.Context, *types.User) (*types.User, error)
@@ -23,11 +28,16 @@ type MongoUserStore struct {
 	collection *mongo.Collection
 }
 
-func NewMongoUserStore(client *mongo.Client) *MongoUserStore {
+func NewMongoUserStore(client *mongo.Client, dbName string) *MongoUserStore {
 	return &MongoUserStore{
 		client:     client,
-		collection: client.Database(DbName).Collection(userCollection),
+		collection: client.Database(dbName).Collection(userCollection),
 	}
+}
+
+func (s *MongoUserStore) Drop(ctx context.Context) error {
+	fmt.Println("--- dropping user collection")
+	return s.collection.Drop(ctx)
 }
 
 func (s *MongoUserStore) UpdateUser(ctx context.Context, id string, params types.UpdateUserParams) error {
@@ -35,10 +45,11 @@ func (s *MongoUserStore) UpdateUser(ctx context.Context, id string, params types
 	if err != nil {
 		return err
 	}
-	_, err = s.collection.UpdateOne(ctx, bson.M{"_id": oid}, bson.D{{"$set", params.ToBSON()}})
+	result, err := s.collection.UpdateOne(ctx, bson.M{"_id": oid}, bson.D{{"$set", params.ToBSON()}})
 	if err != nil {
 		return err
 	}
+	fmt.Print("result", result.MatchedCount)
 	return nil
 }
 
